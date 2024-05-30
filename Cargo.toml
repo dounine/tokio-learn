@@ -3,10 +3,47 @@ name = "tokio-learn"
 version = "0.1.0"
 edition = "2021"
 
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+authors = ["dounine <amwoqmgo@mail.com>"]
+description = "ipa download for rust web"
+repository = "https://github.com/dounine/rust-ipa"
+publish = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = [".", "entity", "migration"]
 
 [dependencies]
-tokio = { version = "1.37.0",features = ["full"] }
 #获取cpu核心数库
 num_cpus = "1.13.0"
 crc32fast = "1.2.1"
+entity = { workspace = true }
+chrono = { workspace = true }
+migration = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+dotenvy = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+actix-web = { workspace = true }
+tracing-actix-web = { workspace = true }
+
+[workspace.dependencies]
+entity = { path = "entity" }
+migration = { path = "migration" }
+tokio = { version = "1.37.0", features = ["full"] }
+sea-orm = { version = "0.12.10", features = ["sqlx-postgres", "runtime-async-std-native-tls", "debug-print"] }
+sea-orm-migration = { version = "0.12.10", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+async-std = { version = "1.10.0", features = ["attributes", "tokio1"] }
+tracing-subscriber = "0.3.18"
+actix-web = "4.6.0"
+tracing-actix-web = "0.7.9"
+chrono = "0.4.38"
+serde_json = "1.0.80"
+tracing = "0.1.40"
+anyhow = "1.0.86"
+dotenvy = "0.15.7"
+envy = { version = "0.4.2" }
+serde = { version = "1.0.195", features = ["derive"] }

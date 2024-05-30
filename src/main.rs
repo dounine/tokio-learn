@@ -1,153 +1,114 @@
+use std::fmt::Display;
 use std::future::Future;
-use std::os::unix::raw::mode_t;
-use std::pin::Pin;
-use std::task::{Poll, ready};
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
+use std::time::Duration;
 
-enum Event {
-    Zip {
-        file_name: String,
-        responder: tokio::sync::oneshot::Sender<String>,
-    },
+use actix_web::{App, HttpServer, Responder};
+use actix_web::web::Data;
+use tracing_actix_web::TracingLogger;
+use tracing_subscriber::fmt::format::FmtSpan;
+
+use migration::{ConnectionTrait, MigratorTrait};
+use migration::sea_orm::{ActiveModelTrait, ConnectOptions, Database, DatabaseConnection, EntityTrait, IntoActiveModel, TransactionTrait};
+
+use crate::span::DomainRootSpanBuilder;
+
+pub mod span;
+pub mod store;
+pub mod router;
+pub mod common;
+
+// #[tokio::main]
+#[actix_web::main]
+async fn main() -> Result<(), anyhow::Error> {
+    dotenvy::dotenv().ok();
+    let format = tracing_subscriber::fmt::format()
+        .with_level(true)
+        .with_line_number(true)
+        .with_thread_names(true)
+        .with_target(true);
+
+    let sub = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .event_format(format);
+
+    sub.init();
+
+    let db_url = "postgres://postgres:postgres@localhost:5432/tokio-test";
+    let mut opt = ConnectOptions::new(db_url);
+    opt.max_connections(2)
+        .sqlx_logging(false)
+        // .sqlx_logging_level(log::LevelFilter::Debug)
+        .min_connections(1)
+        .connect_timeout(Duration::from_secs(8))
+        .acquire_timeout(Duration::from_secs(8))
+        .idle_timeout(Duration::from_secs(8))
+        .max_lifetime(Duration::from_secs(8));
+    let conn: DatabaseConnection = Database::connect(opt)
+        .await
+        .expect("Cannot connect to database");
+    // Migrator::up(&conn, None).await?;
+
+    // let (tx, rx) = tokio::sync::mpsc::channel::<()>(10);
+    //
+    // let mut x = 10;
+    // let mut b = || x+=1;
+    // b();
+    // let mut handles = vec![];
+    // let arc_conn = Arc::new(Mutex::new(conn));
+
+    // let count = Arc::new(Mutex::new(1));
+    // let res = async_retry(|| {
+    //     let num = count.clone();
+    //     async move {
+    //         let mut count = num.lock().await;
+    //         if *count >= 2 {
+    //             info!("success");
+    //             return Ok(1);
+    //         }
+    //         *count += 1;
+    //         Err(anyhow!("hi")) as Result<i32, anyhow::Error>
+    //     }
+    // }, 3, Duration::from_secs(1)).await?;
+    // for _ in 0..10 {
+    //     let conn = arc_conn.clone();
+    //     let handle = tokio::spawn(async move {
+    //         let c = conn.lock().unwrap().clone();
+    //         let tx = c.begin().await.unwrap();
+    //         let res = async_retry(|| async {
+    //             // Ok(1) as Result<i32, DbErr>
+    //             incrment(&tx, 1).await
+    //         }, 3, Duration::from_secs(1)).await;
+    //         tx.commit().await.unwrap();
+    //     });
+    //
+    //     handles.push(handle);
+    // }
+
+    // for handle in handles {
+    //     handle.await.unwrap();
+    // }
+
+    // let tx = conn.begin().await.unwrap();
+    // update_test(&tx).await?;
+    // decrment(&tx, 1).await?;
+
+    // tx.commit().await?;
+    // debug!("success");
+
+    let arc_conn = Data::new(conn);
+
+
+    let server = HttpServer::new(move || {
+        let app = App::new();
+        let tracing = TracingLogger::<DomainRootSpanBuilder>::new();
+        app.wrap(tracing).app_data(arc_conn.clone())
+            .service(router::index)
+    });
+
+    server
+        .workers(1)
+        .bind("0.0.0.0:8080")?
+        .run().await?;
+
+    Ok(())
 }
-
-struct Crc {
-    amt: u32,
-    hasher: crc32fast::Hasher,
-}
-
-struct CrcReader<R> {
-    inner: R,
-    crc: Crc,
-}
-
-impl<R: AsyncRead> CrcReader<R> {
-    fn new(r: R) -> CrcReader<R> {
-        Self {
-            inner: r,
-            crc: Crc::new(),
-        }
-    }
-}
-
-impl<R: AsyncRead + std::marker::Unpin> AsyncRead for CrcReader<R> {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        let mut innser_pin = Pin::new(&mut this.inner);
-        let res = innser_pin.as_mut().poll_read(cx, buf)?;
-        if res.is_pending() {
-            return Poll::Pending;
-        }
-        let bytes = buf.filled();
-        this.crc.update(bytes);
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl Crc {
-    pub fn new() -> Self {
-        Self {
-            amt: 0,
-            hasher: crc32fast::Hasher::new(),
-        }
-    }
-
-    pub fn amount(&self) -> u32 {
-        self.amt
-    }
-
-    pub fn sum(&self) -> u32 {
-        self.hasher.clone().finalize()
-    }
-
-    pub fn update(&mut self, data: &[u8]) {
-        self.amt = self.amt.wrapping_add(data.len() as u32);
-        self.hasher.update(data);
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    read_data(tokio::fs::File::open("Cargo.toml").await.unwrap()).await;
-    if true {
-        return;
-    }
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(2);
-    let my_num_cpus = num_cpus::get();
-    for i in 0..2 {
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            let (resp_tx, resp_rx) = tokio::sync::oneshot::channel::<String>();
-            let event = Event::Zip {
-                file_name: format!("file name {}", i),
-                responder: resp_tx,
-            };
-            tx.send(event).await.unwrap();
-            if let Some(msg) = resp_rx.await.ok() {
-                println!("response: {}", msg);
-            }
-        });
-    }
-    drop(tx);
-    let mut list = Vec::new();
-    while let Some(event) = rx.recv().await {
-        match event {
-            Event::Zip {
-                file_name,
-                responder,
-            } => {
-                println!("file_name: {}", file_name);
-                responder.send("done".to_string()).unwrap();
-                list.push(file_name);
-            }
-        };
-    }
-    println!("{:?}", list);
-}
-
-async fn read_data<R: AsyncRead>(source: R) {
-    let file = tokio::fs::File::open("Cargo.toml").await.unwrap();
-    let mut crc_read = CrcReader::new(file);
-    let mut buf = vec![0u8; 1024];
-    loop {
-        let n = crc_read.read(&mut buf).await.unwrap();
-        if n == 0 {
-            break;
-        }
-        let content = std::str::from_utf8(&buf[..n]).unwrap();
-        println!("content ----> {}", content);
-    }
-    println!("crc amount: {}", crc_read.crc.sum());
-
-
-    //定义一个可以返回future的函数，参数是一个异步闭包
-    let res = future_in_future(|str1: &str, str2: &mut str| async move{
-        hi().await
-    }).await;
-}
-
-async fn hi() -> String {
-    return "".to_string();
-}
-
-async fn future_in_future<F, R, T>(closure: F) -> T
-    where
-        F: FnOnce(&str, &mut str) -> R, // 闭包参数是一个 String，返回一个 Future
-        R: Future<Output=T>, // Future 的输出类型是 i32
-{
-    // let result = closure("Hello".to_string()).await; // 调用传入的闭包并等待其返回的 Future
-    // result + 42 // 在这个示例中，我们假设 Future 的输出是 i32 类型，并对其进行一些处理
-    let mut str2 = "abc".to_string();
-    closure("Hello", &mut str2).await
-}
-
-// async fn future_in_future<F, T>(f: F) -> T
-//     where
-//         F: FnOnce(String) -> T,
-// {
-//     f("hello".to_string())
-// }

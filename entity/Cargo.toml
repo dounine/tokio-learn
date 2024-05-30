@@ -1,0 +1,15 @@
+[package]
+name = "entity"
+version = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[lib]
+name = "entity"
+path = "src/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { workspace = true }
+sea-orm = { workspace = true }
