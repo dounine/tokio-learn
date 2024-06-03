@@ -29,6 +29,9 @@ tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 actix-web = { workspace = true }
 tracing-actix-web = { workspace = true }
+tracing-appender = { workspace = true }
+time = { workspace = true }
+derive_builder = { workspace = true }
 reqwest = { version = "0.12.4", features = ["multipart"] }
 
 [workspace.dependencies]
@@ -38,7 +41,10 @@ tokio = { version = "1.37.0", features = ["full"] }
 sea-orm = { version = "0.12.10", features = ["sqlx-postgres", "runtime-async-std-native-tls", "debug-print"] }
 sea-orm-migration = { version = "0.12.10", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
 async-std = { version = "1.10.0", features = ["attributes", "tokio1"] }
-tracing-subscriber = "0.3.18"
+tracing-appender = "0.2.3"
+derive_builder = "0.20.0"
+tracing-subscriber = { version = "0.3.18", features = ["time", "local-time"] }
+time = { version = "0.3.36", features = ["macros"] }
 actix-web = "4.6.0"
 tracing-actix-web = "0.7.9"
 chrono = "0.4.38"
