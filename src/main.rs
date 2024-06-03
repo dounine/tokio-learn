@@ -96,7 +96,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let builder = AppenderBuilder::default()
         .rotation(Rotation::Daily)
         .prefix(None)
-        .suffix(Some(".log2".to_string()))
+        .suffix(Some(".log2"))
         .clone();
     let tracing_file_appender = file_appender::TracingFileAppender::from_builder(
         builder,

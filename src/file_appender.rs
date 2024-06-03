@@ -65,34 +65,34 @@ impl Rotation {
     }
 }
 
-pub struct TracingFileAppender<'a> {
-    state: State<'a>,
+pub struct TracingFileAppender<'a, 'c> {
+    state: State<'a, 'c>,
     writer: RwLock<File>,
 }
 
 #[derive(Default, Builder, Debug)]
 #[builder(setter(into))]
-pub struct Appender {
+pub struct Appender<'c> {
     rotation: Rotation,
-    prefix: Option<String>,
-    suffix: Option<String>,
+    prefix: Option<&'c str>,
+    suffix: Option<&'c str>,
 }
 
-struct State<'a> {
+struct State<'a, 'c> {
     rotation: Rotation,
     next_time: AtomicUsize,
     directory: &'a Path,
-    prefix: Option<String>,
-    suffix: Option<String>,
+    prefix: Option<&'c str>,
+    suffix: Option<&'c str>,
 }
 
-impl<'a> State<'a> {
+impl<'a, 'c> State<'a, 'c> {
     pub fn new<'b: 'a, T: AsRef<Path> + 'b + ?Sized>(
         now: Time,
         rotation: Rotation,
         directory: &'b T,
-        prefix: Option<String>,
-        suffix: Option<String>,
+        prefix: Option<&'c str>,
+        suffix: Option<&'c str>,
     ) -> Result<(Self, RwLock<File>), anyhow::Error> {
         let next_time = rotation.next_time(now);
         let state = State {
@@ -247,34 +247,34 @@ mod test {
             Rotation::Daily,
             "logs",
             None,
-            Some("log".to_string()),
+            Some("log"),
         )?.0.join_date(Local.with_ymd_and_hms(2024, 12, 12, 0, 0, 0).unwrap()), "2024-12-12.log");
         assert_eq!(State::new(
             State::now(),
             Rotation::Daily,
             "logs",
-            Some("app".to_string()),
-            Some("log".to_string()),
+            Some("app"),
+            Some("log"),
         )?.0.join_date(Local.with_ymd_and_hms(2024, 12, 12, 0, 0, 0).unwrap()), "app.2024-12-12.log");
         assert_eq!(State::new(
             State::now(),
             Rotation::Never,
             "logs",
-            Some("app".to_string()),
-            Some("log".to_string()),
+            Some("app"),
+            Some("log"),
         )?.0.join_date(Local.with_ymd_and_hms(2024, 12, 12, 0, 0, 0).unwrap()), "app.log");
         assert_eq!(State::new(
             State::now(),
             Rotation::Never,
             "logs",
             None,
-            Some("log".to_string()),
+            Some("log"),
         )?.0.join_date(Local.with_ymd_and_hms(2024, 12, 12, 0, 0, 0).unwrap()), "log");
         assert_eq!(State::new(
             State::now(),
             Rotation::Never,
             "logs",
-            Some("log".to_string()),
+            Some("log"),
             None,
         )?.0.join_date(Local.with_ymd_and_hms(2024, 12, 12, 0, 0, 0).unwrap()), "log");
         assert_eq!(State::new(
@@ -290,8 +290,8 @@ mod test {
 
 type Time = DateTime<Local>;
 
-impl<'a> TracingFileAppender<'a> {
-    pub fn from_builder<'b: 'a, T: AsRef<Path> + 'b + ?Sized>(builder: AppenderBuilder, directory: &'b T) -> Result<Self, anyhow::Error> {
+impl<'a, 'c> TracingFileAppender<'a, 'c> {
+    pub fn from_builder<'b: 'a, T: AsRef<Path> + 'b + ?Sized>(builder: AppenderBuilder<'c>, directory: &'b T) -> Result<Self, anyhow::Error> {
         let Appender {
             rotation,
             prefix,
@@ -312,7 +312,7 @@ impl<'a> TracingFileAppender<'a> {
     }
 }
 
-impl<'a> Write for TracingFileAppender<'a> {
+impl<'a, 'c> Write for TracingFileAppender<'a, 'c> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let now = State::now();
         let writer = self.writer.get_mut().unwrap_or_else(PoisonError::into_inner);
