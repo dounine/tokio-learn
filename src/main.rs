@@ -20,6 +20,43 @@ pub mod common;
 // #[tokio::main]
 #[actix_web::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let mut headers = Vec::new();
+    //10个并发请求
+    for i in 0..5 {
+        let handle = tokio::spawn(async move {
+            let client = reqwest::Client::builder()
+                .build().unwrap();
+            let form = reqwest::multipart::Form::new()
+                .text("app_name", "hello")
+                .text("app_version", "1.0.0")
+                .text("app_bundle_id", "a.b.c")
+                .text("remove_all_plugin", "false")
+                .text("remove_watch_plugin", "false")
+                .text("remove_device_limit", "false")
+                .text("remove_app_jump", "false")
+                .text("enable_file_share", "false")
+                .text("zip_level", "Middle")
+                .part("p12_file", reqwest::multipart::Part::bytes(std::fs::read("/Users/lake/Library/Mobile Documents/com~apple~CloudDocs/证书/lake_13_pm.p12").unwrap()).file_name("lake_13_pm.p12"))
+                .part("mp_file", reqwest::multipart::Part::bytes(std::fs::read("/Users/lake/Library/Mobile Documents/com~apple~CloudDocs/证书/lake_13_pm.mobileprovision").unwrap()).file_name("lake_13_pm.mobileprovision"))
+                .text("p12_password", "1");
+
+            let request = client.request(reqwest::Method::POST, format!("http://192.168.0.85:3001/api/ipa/sign/ZxJrE/{}", i))
+                .multipart(form);
+
+            let response = request.send().await.unwrap();
+            let body = response.text().await.unwrap();
+
+            println!("{}", body);
+        });
+        headers.push(handle);
+    }
+    for handle in headers {
+        handle.await?;
+    }
+    Ok(())
+}
+
+async fn _main() -> Result<(), anyhow::Error> {
     dotenvy::dotenv().ok();
     let format = tracing_subscriber::fmt::format()
         .with_level(true)

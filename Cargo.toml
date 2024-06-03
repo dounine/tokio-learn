@@ -29,6 +29,7 @@ tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 actix-web = { workspace = true }
 tracing-actix-web = { workspace = true }
+reqwest = { version = "0.12.4", features = ["multipart"] }
 
 [workspace.dependencies]
 entity = { path = "entity" }

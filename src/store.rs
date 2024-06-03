@@ -17,19 +17,17 @@ pub async fn incrment(tx: &DatabaseTransaction, id: i64) -> Result<(), anyhow::E
     if rows.rows_affected() != 1 {
         bail!("修改失败，影响行数：{}",rows.rows_affected())
     }
-    let span = info_span!("async_test",id=id);
+    let span = info_span!("async_test",id=id,aaa=tracing::field::Empty);
     async_test().instrument(span.clone()).await?;
     instrument_test().await?;
 
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let s = info_span!("hello",parent=&span.clone(),aaaaaaa=tracing::field::Empty);
-
-        // let child = span.clone();
-        let _g = s.enter();
+        let child = span.clone();
+        let _g = child.enter();
         warn!("警告");
-        s.record("aaaaaaa", "你好");
+        child.record("aaa", "你好");
         info!("ok");
     });
 
